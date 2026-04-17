@@ -74,6 +74,9 @@ BOOL CBlockViewDlg::OnInitDialog()
     if (!mPreviewCtrl.SubclassDlgItem(IDC_VIEW, this))
         return FALSE;
 
+    // Exact 200×200 pixel window (RC dialog units are approximate).
+    SetWindowPos(nullptr, 0, 0, 200, 200, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+
     InitDrawingControl(acdbHostApplicationServices()->workingDatabase());
 
     // Start cursor-follow timer (~60 fps)
