@@ -412,18 +412,6 @@ void CBlockViewDlg::UpdateDialogView(HWND hwndViewport, POINT cursorScreen)
     mPreviewCtrl.mpView->invalidate();
     mPreviewCtrl.mpView->update();
 
-    // ── Debug: print to AutoCAD command line every ~1 s (60 ticks × 16ms) ───
-    static int sTick = 0;
-    if (++sTick % 60 == 0)
-    {
-        CRect dlgScreen;
-        GetWindowRect(&dlgScreen);
-        acutPrintf(_T("\nDlg TL(%d,%d) BR(%d,%d) | CursorWCS(%.2f,%.2f) | dlgH=%.4f vpH=%.4f"),
-                   dlgScreen.left, dlgScreen.top,
-                   dlgScreen.right, dlgScreen.bottom,
-                   cursorWCS.x, cursorWCS.y,
-                   dlgH, vpHeight);
-    }
 }
 
 //***************************************************************************************
