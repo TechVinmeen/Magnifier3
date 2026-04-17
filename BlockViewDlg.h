@@ -75,6 +75,8 @@ public:
     AcGeMatrix3d    m_viewMatrix;
     // Green + crosshair overlay (layered, black = transparent)
     CCrosshairWnd   m_crosshair;
+    // GDI+ token (initialised in OnInitDialog, shut down in PostNcDestroy)
+    ULONG_PTR       m_gdipToken = 0;
 
 protected:
     virtual void DoDataExchange(CDataExchange *pDX);
@@ -86,6 +88,7 @@ protected:
     afx_msg void OnTimer(UINT_PTR nIDEvent);
     afx_msg void OnDestroy();
     afx_msg LRESULT OnNcCalcSize(WPARAM wParam, LPARAM lParam);
+    afx_msg BOOL OnEraseBkgnd(CDC* pDC);
 
     DECLARE_MESSAGE_MAP()
 

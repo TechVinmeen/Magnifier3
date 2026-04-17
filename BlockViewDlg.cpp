@@ -22,6 +22,8 @@
 //
 
 #include "StdAfx.h"
+#include <gdiplus.h>
+#pragma comment(lib, "gdiplus.lib")
 
 #if defined(_DEBUG) && !defined(AC_FULL_DEBUG)
 //#error _DEBUG should not be defined except in internal Adesk debug builds
@@ -66,6 +68,7 @@ BEGIN_MESSAGE_MAP(CBlockViewDlg, CAcUiDialog)
     ON_WM_SIZE()
     ON_WM_TIMER()
     ON_WM_DESTROY()
+    ON_WM_ERASEBKGND()
     ON_MESSAGE(WM_NCCALCSIZE, OnNcCalcSize)
 END_MESSAGE_MAP()
 
@@ -79,8 +82,16 @@ BOOL CBlockViewDlg::OnInitDialog()
     if (!mPreviewCtrl.SubclassDlgItem(IDC_VIEW, this))
         return FALSE;
 
+    // GDI+ needed for gradient border rendering.
+    Gdiplus::GdiplusStartupInput gdipInput;
+    Gdiplus::GdiplusStartup(&m_gdipToken, &gdipInput, nullptr);
+
     // Exact 200×200 pixel window (RC dialog units are approximate).
     SetWindowPos(nullptr, 0, 0, 200, 200, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+
+    // Rounded corners (radius 9px) — clip the window shape itself.
+    HRGN hRgn = CreateRoundRectRgn(0, 0, 201, 201, 18, 18);
+    SetWindowRgn(hRgn, FALSE);   // region handle is consumed by the OS
 
     InitDrawingControl(acdbHostApplicationServices()->workingDatabase());
 
@@ -112,6 +123,7 @@ LRESULT CBlockViewDlg::OnNcCalcSize(WPARAM wParam, LPARAM lParam)
 
 void CBlockViewDlg::PostNcDestroy()
 {
+    if (m_gdipToken) { Gdiplus::GdiplusShutdown(m_gdipToken); m_gdipToken = 0; }
     g_pBlockViewDlg = nullptr;
     delete this;
 }
@@ -125,7 +137,47 @@ void CBlockViewDlg::OnSize(UINT nType, int cx, int cy)
 {
     CWnd *wnd = GetDlgItem(IDC_VIEW);
     if (wnd != NULL)
-        wnd->MoveWindow(0, 0, cx, cy);
+        wnd->MoveWindow(4, 4, cx - 8, cy - 8);   // 4px border strip all round
+}
+
+// Vista-style gradient border: GDI+ linear gradient top-to-bottom,
+// with anti-aliased rounded path matching the window region.
+BOOL CBlockViewDlg::OnEraseBkgnd(CDC* pDC)
+{
+    CRect rc;
+    GetClientRect(&rc);
+
+    Gdiplus::Graphics g(pDC->m_hDC);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+
+    // Gradient: icy blue-white at top → richer blue at bottom (Vista Aero palette)
+    Gdiplus::LinearGradientBrush brush(
+        Gdiplus::Point(0, 0),
+        Gdiplus::Point(0, rc.bottom),
+        Gdiplus::Color(255, 200, 225, 255),   // top  — pale icy blue
+        Gdiplus::Color(255,  55, 120, 215)    // bottom — vivid blue
+    );
+
+    // Rounded-rectangle path that matches the window region (radius 9px)
+    const Gdiplus::REAL R = 9.0f;
+    const Gdiplus::REAL W = (Gdiplus::REAL)rc.right;
+    const Gdiplus::REAL H = (Gdiplus::REAL)rc.bottom;
+    Gdiplus::GraphicsPath path;
+    path.AddArc(0.0f,  0.0f,  R*2, R*2, 180.0f, 90.0f);
+    path.AddArc(W-R*2, 0.0f,  R*2, R*2, 270.0f, 90.0f);
+    path.AddArc(W-R*2, H-R*2, R*2, R*2,   0.0f, 90.0f);
+    path.AddArc(0.0f,  H-R*2, R*2, R*2,  90.0f, 90.0f);
+    path.CloseFigure();
+
+    g.FillPath(&brush, &path);
+
+    // 1px bright highlight along the top edge — the Vista "glass edge" glint
+    Gdiplus::Pen highlight(Gdiplus::Color(180, 255, 255, 255), 1.0f);
+    g.DrawArc(&highlight,  1.0f, 1.0f, R*2-1.0f, R*2-1.0f, 180.0f, 90.0f);
+    g.DrawLine(&highlight, R,    1.0f, W-R,       1.0f);
+    g.DrawArc(&highlight,  W-R*2, 1.0f, R*2-1.0f, R*2-1.0f, 270.0f, 90.0f);
+
+    return TRUE;
 }
 
 void CBlockViewDlg::OnTimer(UINT_PTR nIDEvent)
