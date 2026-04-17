@@ -58,6 +58,47 @@ public:
 };
 
 /////////////////////////////////////////////////////////////////////////////
+// CGridDrawable — AcGiDrawable that emits pre-computed WCS grid lines
+// directly into the AcGs scene, rendered before the entity model so grid
+// lines appear behind drawing objects (depth-buffer handles 3D correctly).
+
+class CGridDrawable : public AcGiDrawable
+{
+public:
+    struct Line { AcGePoint3d p1, p2; bool major; };
+    AcGsModel* m_pModel = nullptr;
+
+    void SetLines(const AcArray<Line>& lines) { m_lines = lines; }
+
+protected:
+    Adesk::UInt32 subSetAttributes(AcGiDrawableTraits*) override
+        { return kDrawableRegenDraw; }
+
+    Adesk::Boolean subWorldDraw(AcGiWorldDraw* wd) override
+    {
+        AcCmEntityColor minorCol, majorCol;
+        minorCol.setRGB(70, 70, 70);
+        majorCol.setRGB(120, 120, 120);
+        AcGePoint3d pts[2];
+        for (int i = 0; i < m_lines.length(); ++i)
+        {
+            const Line& ln = m_lines[i];
+            wd->subEntityTraits().setTrueColor(ln.major ? majorCol : minorCol);
+            pts[0] = ln.p1; pts[1] = ln.p2;
+            wd->geometry().polyline(2, pts);
+        }
+        return Adesk::kTrue;
+    }
+
+    void           subViewportDraw(AcGiViewportDraw*) override {}
+    Adesk::Boolean isPersistent() const override { return Adesk::kFalse; }
+    AcDbObjectId   id()           const override { return AcDbObjectId::kNull; }
+
+private:
+    AcArray<Line> m_lines;
+};
+
+/////////////////////////////////////////////////////////////////////////////
 // CDbChangeReactor — forwards per-entity add/modify/erase directly to the
 // AcGsModel so it can update incrementally without a full kInvalidateAll.
 
@@ -108,9 +149,12 @@ public:
     // View matrix: WCS -> View coordinate space
     AcGeMatrix3d    m_viewMatrix;
     // Green + crosshair overlay (layered, black = transparent)
-    CCrosshairWnd   m_crosshair;
+    CCrosshairWnd    m_crosshair;
+    // Grid lines rendered as an AcGiDrawable in the AcGs scene (before entity model)
+    CGridDrawable    m_gridDrawable;
+    AcGsModel*       m_pGridModel = nullptr;
     // GDI+ token (initialised in OnInitDialog, shut down in PostNcDestroy)
-    ULONG_PTR       m_gdipToken = 0;
+    ULONG_PTR        m_gdipToken = 0;
     CDbChangeReactor m_dbReactor;
 
 protected:
@@ -132,7 +176,4 @@ private:
                                          const TCHAR *space = ACDB_MODEL_SPACE);
     // Update dialog GsView: 3x zoom, centred on cursor WCS position
     void UpdateDialogView(HWND hwndViewport, POINT cursorScreen);
-    void DrawGrid(const AcGePoint3d& center, const AcGeVector3d& right,
-                  const AcGeVector3d& up, double dlgW, double dlgH,
-                  const CRect& dlgPx, double vpPixH, double vpHeight);
 };

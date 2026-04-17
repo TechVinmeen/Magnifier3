@@ -252,6 +252,14 @@ void CBlockViewDlg::OnDestroy()
         mCurrentDwg->removeReactor(&m_dbReactor);
         m_dbReactor.m_pModel = nullptr;
     }
+    if (m_pGridModel)
+    {
+        if (mPreviewCtrl.mpView)
+            mPreviewCtrl.mpView->erase(&m_gridDrawable);
+        if (mPreviewCtrl.mpManager)
+            mPreviewCtrl.mpManager->destroyAutoCADModel(m_pGridModel);
+        m_pGridModel = nullptr;
+    }
     CAcUiDialog::OnDestroy();
 }
 
@@ -328,12 +336,81 @@ void CBlockViewDlg::UpdateDialogView(HWND hwndViewport, POINT cursorScreen)
     double dlgW = dlgH * dlgAspect;
     if (dlgW < 1e-10 || dlgH < 1e-10) return;
 
+    // ── Pre-compute grid lines in WCS (sysvar reads safe here in timer context) ─
+    AcArray<CGridDrawable::Line> gridLines;
+    {
+        struct resbuf rb2;
+        memset(&rb2, 0, sizeof(rb2));
+        if (acedGetVar(_T("GRIDMODE"), &rb2) == RTNORM && rb2.resval.rint != 0)
+        {
+            memset(&rb2, 0, sizeof(rb2));
+            if (acedGetVar(_T("GRIDUNIT"), &rb2) == RTNORM)
+            {
+                double gx = rb2.resval.rpoint[X], gy = rb2.resval.rpoint[Y];
+                if (gx < 1e-10) gx = gy;
+                if (gy < 1e-10) gy = gx;
+                if (gx > 1e-10 && gy > 1e-10)
+                {
+                    int major = 5;
+                    memset(&rb2, 0, sizeof(rb2));
+                    if (acedGetVar(_T("GRIDMAJOR"), &rb2) == RTNORM) major = max(1, rb2.resval.rint);
+
+                    int gridDisp = 0;
+                    memset(&rb2, 0, sizeof(rb2));
+                    if (acedGetVar(_T("GRIDDISPLAY"), &rb2) == RTNORM) gridDisp = rb2.resval.rint;
+
+                    double ox = 0.0, oy = 0.0;
+                    memset(&rb2, 0, sizeof(rb2));
+                    if (acedGetVar(_T("SNAPBASE"), &rb2) == RTNORM) {
+                        ox = rb2.resval.rpoint[X];
+                        oy = rb2.resval.rpoint[Y];
+                    }
+
+                    if (gridDisp & 1) {
+                        double ppu = vpPixH > 0 ? (double)vpPixH / vpHeight : 1.0;
+                        while (gx * ppu < 8.0) gx *= 2.0;
+                        while (gy * ppu < 8.0) gy *= 2.0;
+                    }
+
+                    // Half-diagonal of the view covers all visible area regardless of twist.
+                    double halfDiag = 0.5 * sqrt(dlgW * dlgW + dlgH * dlgH) + max(gx, gy);
+                    double cx = cursorWCS.x, cy = cursorWCS.y;
+
+                    int xi = max((int)floor((cx - ox - halfDiag) / gx), -1000);
+                    int xe = min((int)ceil ((cx - ox + halfDiag) / gx),  1000);
+                    int yi = max((int)floor((cy - oy - halfDiag) / gy), -1000);
+                    int ye = min((int)ceil ((cy - oy + halfDiag) / gy),  1000);
+
+                    // Slight z offset puts grid just behind z=0 entities in the
+                    // depth buffer so text, lines, arcs all render in front.
+                    const double kGridZ = -0.001;
+                    for (int n = xi; n <= xe; ++n) {
+                        double wx = ox + n * gx;
+                        CGridDrawable::Line ln;
+                        ln.p1 = AcGePoint3d(wx, cy - halfDiag * 2.0, kGridZ);
+                        ln.p2 = AcGePoint3d(wx, cy + halfDiag * 2.0, kGridZ);
+                        ln.major = (major > 1 && (n % major == 0));
+                        gridLines.append(ln);
+                    }
+                    for (int m = yi; m <= ye; ++m) {
+                        double wy = oy + m * gy;
+                        CGridDrawable::Line ln;
+                        ln.p1 = AcGePoint3d(cx - halfDiag * 2.0, wy, kGridZ);
+                        ln.p2 = AcGePoint3d(cx + halfDiag * 2.0, wy, kGridZ);
+                        ln.major = (major > 1 && (m % major == 0));
+                        gridLines.append(ln);
+                    }
+                }
+            }
+        }
+    }
+    m_gridDrawable.SetLines(gridLines);
+
     // ── Update dialog GsView ─────────────────────────────────────────────────
     AcGePoint3d eye = cursorWCS + vpDir;
     mPreviewCtrl.mpView->setView(eye, cursorWCS, vpUp, dlgW, dlgH);
     mPreviewCtrl.mpView->invalidate();
     mPreviewCtrl.mpView->update();
-    DrawGrid(cursorWCS, vpRight, vpUp, dlgW, dlgH, dlgPx, (double)vpPixH, vpHeight);
 
     // ── Debug: print to AutoCAD command line every ~1 s (60 ticks × 16ms) ───
     static int sTick = 0;
@@ -347,82 +424,6 @@ void CBlockViewDlg::UpdateDialogView(HWND hwndViewport, POINT cursorScreen)
                    cursorWCS.x, cursorWCS.y,
                    dlgH, vpHeight);
     }
-}
-
-void CBlockViewDlg::DrawGrid(const AcGePoint3d& center, const AcGeVector3d& right,
-                             const AcGeVector3d& up,    double dlgW,  double dlgH,
-                             const CRect& dlgPx,        double vpPixH, double vpHeight)
-{
-    struct resbuf rb;
-
-    memset(&rb, 0, sizeof(rb));
-    if (acedGetVar(_T("GRIDMODE"), &rb) != RTNORM || rb.resval.rint == 0) return;
-
-    memset(&rb, 0, sizeof(rb));
-    if (acedGetVar(_T("GRIDUNIT"), &rb) != RTNORM) return;
-    double gx = rb.resval.rpoint[X], gy = rb.resval.rpoint[Y];
-    if (gx < 1e-10) gx = gy;
-    if (gy < 1e-10) gy = gx;
-    if (gx < 1e-10 || gy < 1e-10) return;
-
-    int major = 5;
-    memset(&rb, 0, sizeof(rb));
-    if (acedGetVar(_T("GRIDMAJOR"), &rb) == RTNORM) major = max(1, rb.resval.rint);
-
-    int gridDisp = 0;
-    memset(&rb, 0, sizeof(rb));
-    if (acedGetVar(_T("GRIDDISPLAY"), &rb) == RTNORM) gridDisp = rb.resval.rint;
-
-    double ox = 0.0, oy = 0.0;
-    memset(&rb, 0, sizeof(rb));
-    if (acedGetVar(_T("SNAPBASE"), &rb) == RTNORM) {
-        ox = rb.resval.rpoint[X];
-        oy = rb.resval.rpoint[Y];
-    }
-
-    // Adaptive: match main viewport's effective spacing (same world units = same lines)
-    if (gridDisp & 1) {
-        double ppu = (vpPixH > 0.0 && vpHeight > 1e-10) ? vpPixH / vpHeight : 1.0;
-        const double kMinPx = 8.0;
-        while (gx * ppu < kMinPx) gx *= 2.0;
-        while (gy * ppu < kMinPx) gy *= 2.0;
-    }
-
-    // World → screen
-    int W = dlgPx.right, H = dlgPx.bottom;
-    auto ws = [&](double wx, double wy) -> POINT {
-        AcGeVector3d d = AcGePoint3d(wx, wy, 0.0) - center;
-        POINT p = { (int)((d.dotProduct(right) / dlgW + 0.5) * W),
-                    (int)((0.5 - d.dotProduct(up) / dlgH)    * H) };
-        return p;
-    };
-
-    double cx = center.x, cy = center.y;
-    double range = dlgW + dlgH;
-    int xi = max((int)floor((cx - ox - range) / gx), -500);
-    int xe = min((int)ceil ((cx - ox + range) / gx),  500);
-    int yi = max((int)floor((cy - oy - range) / gy), -500);
-    int ye = min((int)ceil ((cy - oy + range) / gy),  500);
-
-    CClientDC dc(&mPreviewCtrl);
-    CPen penMinor(PS_SOLID, 1, RGB( 70,  70,  70));
-    CPen penMajor(PS_SOLID, 1, RGB(120, 120, 120));
-    CPen* pOld = dc.SelectObject(&penMinor);
-
-    for (int n = xi; n <= xe; ++n) {
-        double wx = ox + n * gx;
-        dc.SelectObject((major > 1 && n % major == 0) ? &penMajor : &penMinor);
-        POINT p1 = ws(wx, cy - 4.0 * dlgH), p2 = ws(wx, cy + 4.0 * dlgH);
-        dc.MoveTo(p1); dc.LineTo(p2);
-    }
-    for (int m = yi; m <= ye; ++m) {
-        double wy = oy + m * gy;
-        dc.SelectObject((major > 1 && m % major == 0) ? &penMajor : &penMinor);
-        POINT p1 = ws(cx - 4.0 * dlgW, wy), p2 = ws(cx + 4.0 * dlgW, wy);
-        dc.MoveTo(p1); dc.LineTo(p2);
-    }
-
-    dc.SelectObject(pOld);
 }
 
 //***************************************************************************************
@@ -491,6 +492,13 @@ Acad::ErrorStatus CBlockViewDlg::InitDrawingControl(AcDbDatabase *pDb, const TCH
         mPreviewCtrl.SetFocus();
         AcDbObjectId currentVsId;
         currentVsId = SetViewTo(mPreviewCtrl.mpView, pDb, m_viewMatrix);
+
+        // Grid model added BEFORE entity model so AcGs renders it first;
+        // entities paint over grid pixels at the same z — grid appears behind.
+        m_pGridModel = mPreviewCtrl.mpManager->createAutoCADModel(*mPreviewCtrl.mpGraphicsKernel);
+        if (m_pGridModel)
+            mPreviewCtrl.view()->add(&m_gridDrawable, m_pGridModel);
+
         mPreviewCtrl.view()->add(spaceRec, mPreviewCtrl.model());
         mPreviewCtrl.mpView->setVisualStyle(currentVsId);
 
