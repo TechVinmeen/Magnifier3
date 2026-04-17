@@ -39,6 +39,11 @@
 static char THIS_FILE[] = __FILE__;
 #endif
 
+BEGIN_MESSAGE_MAP(CCrosshairWnd, CWnd)
+    ON_WM_PAINT()
+    ON_WM_ERASEBKGND()
+END_MESSAGE_MAP()
+
 /////////////////////////////////////////////////////////////////////////////
 // CBlockViewDlg dialog
 
@@ -78,6 +83,17 @@ BOOL CBlockViewDlg::OnInitDialog()
     SetWindowPos(nullptr, 0, 0, 200, 200, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 
     InitDrawingControl(acdbHostApplicationServices()->workingDatabase());
+
+    // Green + crosshair overlay: 20×20 layered child, centred in 200×200 client.
+    // MFC registers the window class via AfxRegisterWndClass — no manual RegisterClassEx.
+    // DWM composites this on top of the scene; black pixels are transparent (LWA_COLORKEY).
+    LPCTSTR cls = AfxRegisterWndClass(CS_HREDRAW | CS_VREDRAW);
+    m_crosshair.CreateEx(WS_EX_LAYERED, cls, nullptr,
+                         WS_CHILD | WS_VISIBLE,
+                         90, 90, 20, 20,
+                         m_hWnd, (HMENU)nullptr);
+    if (m_crosshair.m_hWnd)
+        ::SetLayeredWindowAttributes(m_crosshair.m_hWnd, RGB(0, 0, 0), 255, LWA_COLORKEY);
 
     // Start cursor-follow timer (~60 fps)
     SetTimer(1, 16, nullptr);

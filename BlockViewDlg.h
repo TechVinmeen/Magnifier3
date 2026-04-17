@@ -31,6 +31,33 @@ bool CreateAtilImage(AcGsView *pView, int width, int height, int colorDepth,
 #include "resource.h"
 
 /////////////////////////////////////////////////////////////////////////////
+// CCrosshairWnd — tiny layered overlay that draws a green + marker.
+// Uses MFC class registration (no manual RegisterClassEx needed).
+// Black pixels are made transparent via LWA_COLORKEY so the scene shows through.
+
+class CCrosshairWnd : public CWnd
+{
+public:
+    afx_msg void OnPaint()
+    {
+        CPaintDC dc(this);
+        CRect rc;
+        GetClientRect(&rc);
+        dc.FillSolidRect(&rc, RGB(0, 0, 0));        // black = colour-key transparent
+        CPen pen(PS_SOLID, 1, RGB(0, 255, 0));
+        CPen* old = dc.SelectObject(&pen);
+        int cx = rc.Width() / 2, cy = rc.Height() / 2;
+        dc.MoveTo(cx - 7, cy);   dc.LineTo(cx - 1, cy);
+        dc.MoveTo(cx + 2, cy);   dc.LineTo(cx + 8, cy);
+        dc.MoveTo(cx, cy - 7);   dc.LineTo(cx, cy - 1);
+        dc.MoveTo(cx, cy + 2);   dc.LineTo(cx, cy + 8);
+        dc.SelectObject(old);
+    }
+    afx_msg BOOL OnEraseBkgnd(CDC*) { return TRUE; }
+    DECLARE_MESSAGE_MAP()
+};
+
+/////////////////////////////////////////////////////////////////////////////
 // CBlockViewDlg dialog
 
 class CBlockViewDlg : public CAcUiDialog
@@ -46,6 +73,8 @@ public:
     AcDbDatabase   *mCurrentDwg;
     // View matrix: WCS -> View coordinate space
     AcGeMatrix3d    m_viewMatrix;
+    // Green + crosshair overlay (layered, black = transparent)
+    CCrosshairWnd   m_crosshair;
 
 protected:
     virtual void DoDataExchange(CDataExchange *pDX);
