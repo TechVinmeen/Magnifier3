@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug2022|x64">
+      <Configuration>Debug2022</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release2022|x64">
+      <Configuration>Release2022</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{C4B1C2D3-E4F5-4A6B-9C8D-E0F1A2B3C4D5}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>BlockView</RootNamespace>
+    <!--
+      PlatformToolset: v142 = VS 2019, v143 = VS 2022.
+      Change to v143 if you are using Visual Studio 2022.
+    -->
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <!-- Debug2022 configuration -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug2022|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseOfMfc>Dynamic</UseOfMfc>
+  </PropertyGroup>
+  <!-- Release2022 configuration -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release2022|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseOfMfc>Dynamic</UseOfMfc>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug2022|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="sdk.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release2022|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="sdk.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <!-- Output/intermediate directories -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug2022|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <OutDir>$(SolutionDir)$(Configuration)\</OutDir>
+    <IntDir>$(Configuration)\</IntDir>
+    <TargetName>AsdkBlockView</TargetName>
+    <TargetExt>.arx</TargetExt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release2022|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(SolutionDir)$(Configuration)\</OutDir>
+    <IntDir>$(Configuration)\</IntDir>
+    <TargetName>AsdkBlockView</TargetName>
+    <TargetExt>.arx</TargetExt>
+  </PropertyGroup>
+  <!-- Debug2022 compiler/linker settings -->
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug2022|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN64;_WINDOWS;_AFXEXT;_WINDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <UsePrecompiledHeader>Use</UsePrecompiledHeader>
+      <PrecompiledHeaderFile>StdAfx.h</PrecompiledHeaderFile>
+      <StructMemberAlignment>8Bytes</StructMemberAlignment>
+      <AdditionalIncludeDirectories>$(ARXSDK)\inc;$(ARXSDK)\inc-x64;$(ARXSDK)\utils\Atil\Inc;$(ARXSDK)\utils\Atil\Inc\codec_properties;$(ARXSDK)\utils\Atil\Inc\format_codecs;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4786;4996</DisableSpecificWarnings>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <OutputFile>$(OutDir)$(TargetName).arx</OutputFile>
+      <ModuleDefinitionFile>$(ARXSDK)\inc\AcRxDefault.def</ModuleDefinitionFile>
+      <AdditionalLibraryDirectories>$(ARXSDK)\lib-x64;$(ARXSDK)\utils\Atil\Lib-x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>ac1st24.lib;acad.lib;acapp.lib;acapp_crx.lib;AcCamera.lib;accore.lib;acdb24.lib;acdbmgd.lib;AcDbPointCloudObj.lib;AcDrawBridge.lib;AcFdEval.lib;AcFdUi.lib;acge24.lib;AcGeolocationObj.lib;acgeoment.lib;acgiapi.lib;acismobj24.lib;AcJsCoreStub_crx.lib;acModelDocObj.lib;AcMPolygonObj.lib;AcPal.lib;AcPublish_crx.lib;AcSceneOE.lib;AcTc.lib;AcTcUi.lib;acui24.lib;AdApplicationFrame.lib;adui24.lib;aNav.lib;axdb.lib;rxapi.lib;userdata.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+  <!-- Release2022 compiler/linker settings -->
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release2022|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN64;_WINDOWS;_AFXEXT;NDEBUG;_WINDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <UsePrecompiledHeader>Use</UsePrecompiledHeader>
+      <PrecompiledHeaderFile>StdAfx.h</PrecompiledHeaderFile>
+      <StructMemberAlignment>8Bytes</StructMemberAlignment>
+      <AdditionalIncludeDirectories>$(ARXSDK)\inc;$(ARXSDK)\inc-x64;$(ARXSDK)\utils\Atil\Inc;$(ARXSDK)\utils\Atil\Inc\codec_properties;$(ARXSDK)\utils\Atil\Inc\format_codecs;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4786;4996</DisableSpecificWarnings>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <SubSystem>Windows</SubSystem>
+      <OutputFile>$(OutDir)$(TargetName).arx</OutputFile>
+      <ModuleDefinitionFile>$(ARXSDK)\inc\AcRxDefault.def</ModuleDefinitionFile>
+      <AdditionalLibraryDirectories>$(ARXSDK)\lib-x64;$(ARXSDK)\utils\Atil\Lib-x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>ac1st24.lib;acad.lib;acapp.lib;acapp_crx.lib;AcCamera.lib;accore.lib;acdb24.lib;acdbmgd.lib;AcDbPointCloudObj.lib;AcDrawBridge.lib;AcFdEval.lib;AcFdUi.lib;acge24.lib;AcGeolocationObj.lib;acgeoment.lib;acgiapi.lib;acismobj24.lib;AcJsCoreStub_crx.lib;acModelDocObj.lib;AcMPolygonObj.lib;AcPal.lib;AcPublish_crx.lib;AcSceneOE.lib;AcTc.lib;AcTcUi.lib;acui24.lib;AdApplicationFrame.lib;adui24.lib;aNav.lib;axdb.lib;rxapi.lib;userdata.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <ResourceCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+  <!-- Source files -->
+  <ItemGroup>
+    <ClCompile Include="BlockView.cpp" />
+    <ClCompile Include="BlockViewCommands.cpp" />
+    <ClCompile Include="BlockViewDlg.cpp" />
+    <ClCompile Include="GsPreviewCtrl.cpp" />
+    <ClCompile Include="rxdebug.cpp" />
+    <ClCompile Include="StdAfx.cpp">
+      <UsePrecompiledHeader>Create</UsePrecompiledHeader>
+      <PrecompiledHeaderFile>StdAfx.h</PrecompiledHeaderFile>
+    </ClCompile>
+  </ItemGroup>
+  <!-- Header files -->
+  <ItemGroup>
+    <ClInclude Include="BlockViewDlg.h" />
+    <ClInclude Include="ColorPalette.h" />
+    <ClInclude Include="GsPreviewCtrl.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="rxdebug.h" />
+    <ClInclude Include="StdAfx.h" />
+    <ClInclude Include="StdArx.h" />
+  </ItemGroup>
+  <!-- Resource files -->
+  <ItemGroup>
+    <ResourceCompile Include="BlockView.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="sdk.props" />
+    <None Include="idi_cros.cur" />
+    <None Include="idi_orbi.cur" />
+    <None Include="idi_pan.cur" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
