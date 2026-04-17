@@ -58,6 +58,22 @@ public:
 };
 
 /////////////////////////////////////////////////////////////////////////////
+// CDbChangeReactor — sets a dirty flag whenever the database changes so we
+// only call AcGsModel::invalidate when geometry actually changed.
+
+class CDbChangeReactor : public AcDbDatabaseReactor
+{
+public:
+    bool* m_pDirty = nullptr;
+    void objectAppended(const AcDbDatabase*, const AcDbObject*) override
+        { if (m_pDirty) *m_pDirty = true; }
+    void objectModified(const AcDbDatabase*, const AcDbObject*) override
+        { if (m_pDirty) *m_pDirty = true; }
+    void objectErased(const AcDbDatabase*, const AcDbObject*, Adesk::Boolean) override
+        { if (m_pDirty) *m_pDirty = true; }
+};
+
+/////////////////////////////////////////////////////////////////////////////
 // CBlockViewDlg dialog
 
 class CBlockViewDlg : public CAcUiDialog
@@ -77,6 +93,9 @@ public:
     CCrosshairWnd   m_crosshair;
     // GDI+ token (initialised in OnInitDialog, shut down in PostNcDestroy)
     ULONG_PTR       m_gdipToken = 0;
+    // Database change reactor + dirty flag
+    CDbChangeReactor m_dbReactor;
+    bool             m_modelDirty = true;
 
 protected:
     virtual void DoDataExchange(CDataExchange *pDX);

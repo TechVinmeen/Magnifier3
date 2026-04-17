@@ -10,3 +10,4 @@ dobuild2.bat
 findmsbuild.bat
 build_out.txt
 msbuild_path.txt
+*.lsp

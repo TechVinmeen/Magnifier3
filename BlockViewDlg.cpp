@@ -247,6 +247,11 @@ void CBlockViewDlg::OnTimer(UINT_PTR nIDEvent)
 void CBlockViewDlg::OnDestroy()
 {
     KillTimer(1);
+    if (mCurrentDwg)
+    {
+        mCurrentDwg->removeReactor(&m_dbReactor);
+        m_dbReactor.m_pDirty = nullptr;
+    }
     CAcUiDialog::OnDestroy();
 }
 
@@ -326,6 +331,11 @@ void CBlockViewDlg::UpdateDialogView(HWND hwndViewport, POINT cursorScreen)
     // ── Update dialog GsView ─────────────────────────────────────────────────
     AcGePoint3d eye = cursorWCS + vpDir;
     mPreviewCtrl.mpView->setView(eye, cursorWCS, vpUp, dlgW, dlgH);
+    if (m_modelDirty && mPreviewCtrl.mpModel)
+    {
+        mPreviewCtrl.mpModel->invalidate(AcGsModel::kInvalidateAll);
+        m_modelDirty = false;
+    }
     mPreviewCtrl.mpView->invalidate();
     mPreviewCtrl.mpView->update();
 
@@ -401,6 +411,8 @@ Acad::ErrorStatus CBlockViewDlg::InitDrawingControl(AcDbDatabase *pDb, const TCH
         return Acad::eNullBlockName;
 
     mCurrentDwg = pDb;
+    m_dbReactor.m_pDirty = &m_modelDirty;
+    pDb->addReactor(&m_dbReactor);
 
     AcDbBlockTableRecordPointer spaceRec(space, pDb, AcDb::kForRead);
     if (spaceRec.openStatus() == Acad::eOk)
