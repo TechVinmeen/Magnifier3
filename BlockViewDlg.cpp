@@ -137,7 +137,13 @@ void CBlockViewDlg::OnSize(UINT nType, int cx, int cy)
 {
     CWnd *wnd = GetDlgItem(IDC_VIEW);
     if (wnd != NULL)
+    {
         wnd->MoveWindow(4, 4, cx - 8, cy - 8);   // 4px border strip all round
+        // Round the control corners to match the dialog shape.
+        // Inner radius 5px (= outer 9px - 4px border) keeps corners concentric.
+        HRGN hRgn = CreateRoundRectRgn(0, 0, cx - 7, cy - 7, 10, 10);
+        wnd->SetWindowRgn(hRgn, TRUE);
+    }
 }
 
 // Vista-style gradient border: GDI+ linear gradient top-to-bottom,
