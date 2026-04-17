@@ -58,19 +58,37 @@ public:
 };
 
 /////////////////////////////////////////////////////////////////////////////
-// CDbChangeReactor — sets a dirty flag whenever the database changes so we
-// only call AcGsModel::invalidate when geometry actually changed.
+// CDbChangeReactor — forwards per-entity add/modify/erase directly to the
+// AcGsModel so it can update incrementally without a full kInvalidateAll.
 
 class CDbChangeReactor : public AcDbDatabaseReactor
 {
 public:
-    bool* m_pDirty = nullptr;
-    void objectAppended(const AcDbDatabase*, const AcDbObject*) override
-        { if (m_pDirty) *m_pDirty = true; }
-    void objectModified(const AcDbDatabase*, const AcDbObject*) override
-        { if (m_pDirty) *m_pDirty = true; }
-    void objectErased(const AcDbDatabase*, const AcDbObject*, Adesk::Boolean) override
-        { if (m_pDirty) *m_pDirty = true; }
+    AcGsModel*   m_pModel  = nullptr;
+    AcDbObjectId m_spaceId;
+
+    void objectAppended(const AcDbDatabase*, const AcDbObject* p) override
+        { notify(p, 0); }
+    void objectModified(const AcDbDatabase*, const AcDbObject* p) override
+        { notify(p, 1); }
+    void objectErased  (const AcDbDatabase*, const AcDbObject* p, Adesk::Boolean) override
+        { notify(p, 2); }
+
+private:
+    void notify(const AcDbObject* pObj, int type)
+    {
+        if (!m_pModel || !pObj) return;
+        if (pObj->ownerId() != m_spaceId) return;
+        AcDbEntity* pEnt = AcDbEntity::cast(const_cast<AcDbObject*>(pObj));
+        if (!pEnt) return;
+        Adesk::IntDbId pid = pObj->ownerId().asOldId();
+        switch (type)
+        {
+        case 0: m_pModel->onAdded   (pEnt, pid); break;
+        case 1: m_pModel->onModified(pEnt, pid); break;
+        case 2: m_pModel->onErased  (pEnt, pid); break;
+        }
+    }
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -93,9 +111,7 @@ public:
     CCrosshairWnd   m_crosshair;
     // GDI+ token (initialised in OnInitDialog, shut down in PostNcDestroy)
     ULONG_PTR       m_gdipToken = 0;
-    // Database change reactor + dirty flag
     CDbChangeReactor m_dbReactor;
-    bool             m_modelDirty = true;
 
 protected:
     virtual void DoDataExchange(CDataExchange *pDX);

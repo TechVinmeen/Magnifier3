@@ -250,7 +250,7 @@ void CBlockViewDlg::OnDestroy()
     if (mCurrentDwg)
     {
         mCurrentDwg->removeReactor(&m_dbReactor);
-        m_dbReactor.m_pDirty = nullptr;
+        m_dbReactor.m_pModel = nullptr;
     }
     CAcUiDialog::OnDestroy();
 }
@@ -331,11 +331,6 @@ void CBlockViewDlg::UpdateDialogView(HWND hwndViewport, POINT cursorScreen)
     // ── Update dialog GsView ─────────────────────────────────────────────────
     AcGePoint3d eye = cursorWCS + vpDir;
     mPreviewCtrl.mpView->setView(eye, cursorWCS, vpUp, dlgW, dlgH);
-    if (m_modelDirty && mPreviewCtrl.mpModel)
-    {
-        mPreviewCtrl.mpModel->invalidate(AcGsModel::kInvalidateAll);
-        m_modelDirty = false;
-    }
     mPreviewCtrl.mpView->invalidate();
     mPreviewCtrl.mpView->update();
 
@@ -411,8 +406,6 @@ Acad::ErrorStatus CBlockViewDlg::InitDrawingControl(AcDbDatabase *pDb, const TCH
         return Acad::eNullBlockName;
 
     mCurrentDwg = pDb;
-    m_dbReactor.m_pDirty = &m_modelDirty;
-    pDb->addReactor(&m_dbReactor);
 
     AcDbBlockTableRecordPointer spaceRec(space, pDb, AcDb::kForRead);
     if (spaceRec.openStatus() == Acad::eOk)
@@ -423,6 +416,11 @@ Acad::ErrorStatus CBlockViewDlg::InitDrawingControl(AcDbDatabase *pDb, const TCH
         currentVsId = SetViewTo(mPreviewCtrl.mpView, pDb, m_viewMatrix);
         mPreviewCtrl.view()->add(spaceRec, mPreviewCtrl.model());
         mPreviewCtrl.mpView->setVisualStyle(currentVsId);
+
+        // Wire reactor after model exists; filter to model-space entities only.
+        m_dbReactor.m_pModel  = mPreviewCtrl.mpModel;
+        m_dbReactor.m_spaceId = spaceRec->objectId();
+        pDb->addReactor(&m_dbReactor);
     }
     return spaceRec.openStatus();
 }
