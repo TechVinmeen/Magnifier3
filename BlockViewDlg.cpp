@@ -77,14 +77,15 @@ END_MESSAGE_MAP()
 
 BOOL CBlockViewDlg::OnInitDialog()
 {
+    // GDI+ must be ready before the base class call, which can trigger
+    // WM_ERASEBKGND before we get a chance to initialise it ourselves.
+    Gdiplus::GdiplusStartupInput gdipInput;
+    Gdiplus::GdiplusStartup(&m_gdipToken, &gdipInput, nullptr);
+
     CAcUiDialog::OnInitDialog();
 
     if (!mPreviewCtrl.SubclassDlgItem(IDC_VIEW, this))
         return FALSE;
-
-    // GDI+ needed for gradient border rendering.
-    Gdiplus::GdiplusStartupInput gdipInput;
-    Gdiplus::GdiplusStartup(&m_gdipToken, &gdipInput, nullptr);
 
     // Exact 200×200 pixel window (RC dialog units are approximate).
     SetWindowPos(nullptr, 0, 0, 200, 200, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -105,6 +106,22 @@ BOOL CBlockViewDlg::OnInitDialog()
                          m_hWnd, (HMENU)nullptr);
     if (m_crosshair.m_hWnd)
         ::SetLayeredWindowAttributes(m_crosshair.m_hWnd, RGB(0, 0, 0), 255, LWA_COLORKEY);
+
+    // Pre-render the scene now, while the window is still hidden.
+    // Without this the dialog flashes the blank gradient border for ~1 s
+    // on first show while the GsView builds its display list.
+    if (mPreviewCtrl.mpView)
+    {
+        mPreviewCtrl.mpView->invalidate();
+        mPreviewCtrl.mpView->update();
+    }
+
+    // Position next to the cursor right now so the window never appears at
+    // the RC template origin (0,0) before the first timer tick moves it.
+    POINT pt;
+    ::GetCursorPos(&pt);
+    SetWindowPos(nullptr, pt.x + 5, pt.y - 5 - 200, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 
     // Start cursor-follow timer (~60 fps)
     SetTimer(1, 16, nullptr);
