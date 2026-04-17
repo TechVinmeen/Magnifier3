@@ -333,6 +333,7 @@ void CBlockViewDlg::UpdateDialogView(HWND hwndViewport, POINT cursorScreen)
     mPreviewCtrl.mpView->setView(eye, cursorWCS, vpUp, dlgW, dlgH);
     mPreviewCtrl.mpView->invalidate();
     mPreviewCtrl.mpView->update();
+    DrawGrid(cursorWCS, vpRight, vpUp, dlgW, dlgH, dlgPx, (double)vpPixH, vpHeight);
 
     // ── Debug: print to AutoCAD command line every ~1 s (60 ticks × 16ms) ───
     static int sTick = 0;
@@ -346,6 +347,82 @@ void CBlockViewDlg::UpdateDialogView(HWND hwndViewport, POINT cursorScreen)
                    cursorWCS.x, cursorWCS.y,
                    dlgH, vpHeight);
     }
+}
+
+void CBlockViewDlg::DrawGrid(const AcGePoint3d& center, const AcGeVector3d& right,
+                             const AcGeVector3d& up,    double dlgW,  double dlgH,
+                             const CRect& dlgPx,        double vpPixH, double vpHeight)
+{
+    struct resbuf rb;
+
+    memset(&rb, 0, sizeof(rb));
+    if (acedGetVar(_T("GRIDMODE"), &rb) != RTNORM || rb.resval.rint == 0) return;
+
+    memset(&rb, 0, sizeof(rb));
+    if (acedGetVar(_T("GRIDUNIT"), &rb) != RTNORM) return;
+    double gx = rb.resval.rpoint[X], gy = rb.resval.rpoint[Y];
+    if (gx < 1e-10) gx = gy;
+    if (gy < 1e-10) gy = gx;
+    if (gx < 1e-10 || gy < 1e-10) return;
+
+    int major = 5;
+    memset(&rb, 0, sizeof(rb));
+    if (acedGetVar(_T("GRIDMAJOR"), &rb) == RTNORM) major = max(1, rb.resval.rint);
+
+    int gridDisp = 0;
+    memset(&rb, 0, sizeof(rb));
+    if (acedGetVar(_T("GRIDDISPLAY"), &rb) == RTNORM) gridDisp = rb.resval.rint;
+
+    double ox = 0.0, oy = 0.0;
+    memset(&rb, 0, sizeof(rb));
+    if (acedGetVar(_T("SNAPBASE"), &rb) == RTNORM) {
+        ox = rb.resval.rpoint[X];
+        oy = rb.resval.rpoint[Y];
+    }
+
+    // Adaptive: match main viewport's effective spacing (same world units = same lines)
+    if (gridDisp & 1) {
+        double ppu = (vpPixH > 0.0 && vpHeight > 1e-10) ? vpPixH / vpHeight : 1.0;
+        const double kMinPx = 8.0;
+        while (gx * ppu < kMinPx) gx *= 2.0;
+        while (gy * ppu < kMinPx) gy *= 2.0;
+    }
+
+    // World → screen
+    int W = dlgPx.right, H = dlgPx.bottom;
+    auto ws = [&](double wx, double wy) -> POINT {
+        AcGeVector3d d = AcGePoint3d(wx, wy, 0.0) - center;
+        POINT p = { (int)((d.dotProduct(right) / dlgW + 0.5) * W),
+                    (int)((0.5 - d.dotProduct(up) / dlgH)    * H) };
+        return p;
+    };
+
+    double cx = center.x, cy = center.y;
+    double range = dlgW + dlgH;
+    int xi = max((int)floor((cx - ox - range) / gx), -500);
+    int xe = min((int)ceil ((cx - ox + range) / gx),  500);
+    int yi = max((int)floor((cy - oy - range) / gy), -500);
+    int ye = min((int)ceil ((cy - oy + range) / gy),  500);
+
+    CClientDC dc(&mPreviewCtrl);
+    CPen penMinor(PS_SOLID, 1, RGB( 70,  70,  70));
+    CPen penMajor(PS_SOLID, 1, RGB(120, 120, 120));
+    CPen* pOld = dc.SelectObject(&penMinor);
+
+    for (int n = xi; n <= xe; ++n) {
+        double wx = ox + n * gx;
+        dc.SelectObject((major > 1 && n % major == 0) ? &penMajor : &penMinor);
+        POINT p1 = ws(wx, cy - 4.0 * dlgH), p2 = ws(wx, cy + 4.0 * dlgH);
+        dc.MoveTo(p1); dc.LineTo(p2);
+    }
+    for (int m = yi; m <= ye; ++m) {
+        double wy = oy + m * gy;
+        dc.SelectObject((major > 1 && m % major == 0) ? &penMajor : &penMinor);
+        POINT p1 = ws(cx - 4.0 * dlgW, wy), p2 = ws(cx + 4.0 * dlgW, wy);
+        dc.MoveTo(p1); dc.LineTo(p2);
+    }
+
+    dc.SelectObject(pOld);
 }
 
 //***************************************************************************************

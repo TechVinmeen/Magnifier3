@@ -132,4 +132,7 @@ private:
                                          const TCHAR *space = ACDB_MODEL_SPACE);
     // Update dialog GsView: 3x zoom, centred on cursor WCS position
     void UpdateDialogView(HWND hwndViewport, POINT cursorScreen);
+    void DrawGrid(const AcGePoint3d& center, const AcGeVector3d& right,
+                  const AcGeVector3d& up, double dlgW, double dlgH,
+                  const CRect& dlgPx, double vpPixH, double vpHeight);
 };
