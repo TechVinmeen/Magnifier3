@@ -30,6 +30,7 @@
 #endif
 
 #include "stdarx.h"
+#include <core_rxmfcapi.h>
 #include "RgbModel.h"
 #include "BlockViewDlg.h"
 #include "resource.h"
@@ -40,6 +41,8 @@
 #undef THIS_FILE
 static char THIS_FILE[] = __FILE__;
 #endif
+
+ACRX_CONS_DEFINE_MEMBERS(COsnapMonitor, AcEdInputPointMonitor, 1);
 
 BEGIN_MESSAGE_MAP(CCrosshairWnd, CWnd)
     ON_WM_PAINT()
@@ -247,6 +250,8 @@ void CBlockViewDlg::OnTimer(UINT_PTR nIDEvent)
 void CBlockViewDlg::OnDestroy()
 {
     KillTimer(1);
+    acDocManager->curDocument()->inputPointManager()->removePointMonitor(&m_osnapMonitor);
+
     if (mCurrentDwg)
     {
         mCurrentDwg->removeReactor(&m_dbReactor);
@@ -406,6 +411,26 @@ void CBlockViewDlg::UpdateDialogView(HWND hwndViewport, POINT cursorScreen)
     }
     m_gridDrawable.SetLines(gridLines);
 
+    // ── OSNAP snap marker ─────────────────────────────────────────────────────
+    double pixelSize      = dlgPx.right > 0 ? dlgW / (double)dlgPx.right : 1.0;
+    double markerHalfSize = pixelSize * 8.0;  // 8-px apparent radius
+
+    // Read AutoSnap marker color from Options > Drafting (safe in timer context).
+    BYTE snapR = 255, snapG = 255, snapB = 0;  // yellow fallback
+    AcColorSettings cs;
+    memset(&cs, 0, sizeof(cs));
+    if (acedGetCurrentColors(&cs) && cs.dwModelASnapMarkerColor != 0)
+    {
+        DWORD cr = cs.dwModelASnapMarkerColor;
+        snapR = GetRValue(cr); snapG = GetGValue(cr); snapB = GetBValue(cr);
+    }
+
+    m_gridDrawable.SetSnapPoint(m_osnapMonitor.m_hasSnap,
+                                m_osnapMonitor.m_snapPt,
+                                m_osnapMonitor.m_snapMask,
+                                m_osnapMonitor.m_hasSnap ? markerHalfSize : 0.0,
+                                snapR, snapG, snapB, pixelSize);
+
     // ── Update dialog GsView ─────────────────────────────────────────────────
     AcGePoint3d eye = cursorWCS + vpDir;
     mPreviewCtrl.mpView->setView(eye, cursorWCS, vpUp, dlgW, dlgH);
@@ -487,6 +512,7 @@ Acad::ErrorStatus CBlockViewDlg::InitDrawingControl(AcDbDatabase *pDb, const TCH
         if (m_pGridModel)
             mPreviewCtrl.view()->add(&m_gridDrawable, m_pGridModel);
 
+        mPreviewCtrl.model()->enableLinetypes(true);
         mPreviewCtrl.view()->add(spaceRec, mPreviewCtrl.model());
         mPreviewCtrl.mpView->setVisualStyle(currentVsId);
 
@@ -494,6 +520,8 @@ Acad::ErrorStatus CBlockViewDlg::InitDrawingControl(AcDbDatabase *pDb, const TCH
         m_dbReactor.m_pModel  = mPreviewCtrl.mpModel;
         m_dbReactor.m_spaceId = spaceRec->objectId();
         pDb->addReactor(&m_dbReactor);
+
+        acDocManager->curDocument()->inputPointManager()->addPointMonitor(&m_osnapMonitor);
     }
     return spaceRec.openStatus();
 }

@@ -29,6 +29,7 @@ bool CreateAtilImage(AcGsView *pView, int width, int height, int colorDepth,
 
 #include "GsPreviewCtrl.h"
 #include "resource.h"
+#include <acedinpt.h>
 
 /////////////////////////////////////////////////////////////////////////////
 // CCrosshairWnd — tiny layered overlay that draws a green + marker.
@@ -62,6 +63,35 @@ public:
 // directly into the AcGs scene, rendered before the entity model so grid
 // lines appear behind drawing objects (depth-buffer handles 3D correctly).
 
+// COsnapMonitor — captures the active OSNAP snap point each cursor move.
+// Registered with acedGetInputPointManager() while the magnifier is open.
+// Thread-safe reads: written on the ARX/main thread, read on the same timer thread.
+
+class COsnapMonitor : public AcEdInputPointMonitor
+{
+public:
+    ACRX_DECLARE_MEMBERS(COsnapMonitor);
+
+    AcGePoint3d     m_snapPt;
+    AcDb::OsnapMask m_snapMask = static_cast<AcDb::OsnapMask>(0);
+    bool            m_hasSnap  = false;
+
+    Acad::ErrorStatus monitorInputPoint(const AcEdInputPoint& input,
+                                        AcEdInputPointMonitorResult&) override
+    {
+        m_snapMask = input.osnapMask();
+        m_hasSnap  = (m_snapMask != 0);
+        if (m_hasSnap)
+            m_snapPt = input.osnappedPoint();
+        return Acad::eOk;
+    }
+};
+
+/////////////////////////////////////////////////////////////////////////////
+// CGridDrawable — AcGiDrawable that emits pre-computed WCS grid lines
+// directly into the AcGs scene, rendered before the entity model so grid
+// lines appear behind drawing objects (depth-buffer handles 3D correctly).
+
 class CGridDrawable : public AcGiDrawable
 {
 public:
@@ -69,6 +99,20 @@ public:
     AcGsModel* m_pModel = nullptr;
 
     void SetLines(const AcArray<Line>& lines) { m_lines = lines; }
+
+    // Snap marker — set each tick by UpdateDialogView from COsnapMonitor data.
+    // snapColor: read from AcColorSettings in UpdateDialogView (safe timer context).
+    // pixelSize: WCS units per screen pixel — used to simulate line thickness.
+    void SetSnapPoint(bool hasSnap, const AcGePoint3d& pt, AcDb::OsnapMask mask,
+                      double markerHalfSize, BYTE r, BYTE g, BYTE b, double pixelSize)
+    {
+        m_hasSnap        = hasSnap;
+        m_snapPt         = pt;
+        m_snapMask       = mask;
+        m_markerHalfSize = markerHalfSize;
+        m_snapR = r; m_snapG = g; m_snapB = b;
+        m_pixelSize      = pixelSize;
+    }
 
 protected:
     Adesk::UInt32 subSetAttributes(AcGiDrawableTraits*) override
@@ -87,6 +131,118 @@ protected:
             pts[0] = ln.p1; pts[1] = ln.p2;
             wd->geometry().polyline(2, pts);
         }
+
+        // OSNAP marker — shapes and color match AutoCAD's standard snap glyphs.
+        // Color stored by UpdateDialogView; thickness by 3-pass pixel offset rendering.
+        if (m_hasSnap && m_markerHalfSize > 0.0)
+        {
+            AcCmEntityColor snapColor;
+            snapColor.setRGB(m_snapR, m_snapG, m_snapB);
+            wd->subEntityTraits().setTrueColor(snapColor);
+
+            double h  = m_markerHalfSize;
+            double px = m_pixelSize;   // 1 WCS pixel — used for thickness passes
+
+            // Draw the shape 3 times at (0,0), (+px,0), (0,+px) to fake ~2px thickness.
+            const double offX[3] = { 0.0,  px, 0.0 };
+            const double offY[3] = { 0.0, 0.0,  px };
+            for (int pass = 0; pass < 3; ++pass)
+            {
+            double x = m_snapPt.x + offX[pass];
+            double y = m_snapPt.y + offY[pass];
+            double z = m_snapPt.z;
+
+            auto polyline = [&](std::initializer_list<AcGePoint3d> pts) {
+                AcArray<AcGePoint3d> arr;
+                for (auto& p : pts) arr.append(p);
+                wd->geometry().polyline(arr.length(), arr.asArrayPtr());
+            };
+
+            auto circle = [&](int N = 12) {
+                AcArray<AcGePoint3d> pts;
+                for (int i = 0; i <= N; ++i) {
+                    double a = i * 6.28318530717958647 / N;
+                    pts.append(AcGePoint3d(x + h * cos(a), y + h * sin(a), z));
+                }
+                wd->geometry().polyline(pts.length(), pts.asArrayPtr());
+            };
+
+            if (m_snapMask & AcDb::kOsMaskEnd)
+            {
+                // Endpoint: hollow square
+                polyline({{x-h,y-h,z},{x+h,y-h,z},{x+h,y+h,z},{x-h,y+h,z},{x-h,y-h,z}});
+            }
+            else if (m_snapMask & AcDb::kOsMaskMid)
+            {
+                // Midpoint: hollow triangle tip-up
+                polyline({{x,y+h,z},{x-h,y-h,z},{x+h,y-h,z},{x,y+h,z}});
+            }
+            else if (m_snapMask & AcDb::kOsMaskCen)
+            {
+                // Center: hollow circle
+                circle(12);
+            }
+            else if (m_snapMask & AcDb::kOsMaskNode)
+            {
+                // Node: circle + X through it
+                circle(12);
+                polyline({{x-h,y,z},{x+h,y,z}});
+                polyline({{x,y-h,z},{x,y+h,z}});
+            }
+            else if (m_snapMask & AcDb::kOsMaskQuad)
+            {
+                // Quadrant: hollow diamond
+                polyline({{x,y+h,z},{x+h,y,z},{x,y-h,z},{x-h,y,z},{x,y+h,z}});
+            }
+            else if (m_snapMask & AcDb::kOsMaskInt)
+            {
+                // Intersection: X
+                polyline({{x-h,y-h,z},{x+h,y+h,z}});
+                polyline({{x+h,y-h,z},{x-h,y+h,z}});
+            }
+            else if (m_snapMask & AcDb::kOsMaskIns)
+            {
+                // Insertion: square with tick marks at midpoints of each side
+                polyline({{x-h,y-h,z},{x+h,y-h,z},{x+h,y+h,z},{x-h,y+h,z},{x-h,y-h,z}});
+                double t = h * 0.4;
+                polyline({{x-h,y-t,z},{x-h-t,y,z},{x-h,y+t,z}});
+                polyline({{x+h,y-t,z},{x+h+t,y,z},{x+h,y+t,z}});
+                polyline({{x-t,y+h,z},{x,y+h+t,z},{x+t,y+h,z}});
+                polyline({{x-t,y-h,z},{x,y-h-t,z},{x+t,y-h,z}});
+            }
+            else if (m_snapMask & AcDb::kOsMaskPerp)
+            {
+                // Perpendicular: right-angle symbol
+                polyline({{x-h,y+h,z},{x-h,y-h,z},{x+h,y-h,z}});
+                polyline({{x-h,y-h*0.3,z},{x-h*0.3,y-h*0.3,z},{x-h*0.3,y-h,z}});
+            }
+            else if (m_snapMask & AcDb::kOsMaskTan)
+            {
+                // Tangent: circle with horizontal tangent line at bottom
+                circle(12);
+                polyline({{x-h,y-h,z},{x+h,y-h,z}});
+            }
+            else if (m_snapMask & AcDb::kOsMaskNear)
+            {
+                // Nearest: hourglass (two triangles, tips touching at centre)
+                polyline({{x-h,y+h,z},{x+h,y+h,z},{x,y,z},{x-h,y+h,z}});
+                polyline({{x-h,y-h,z},{x+h,y-h,z},{x,y,z},{x-h,y-h,z}});
+            }
+            else if (m_snapMask & AcDb::kOsMaskApint)
+            {
+                // Apparent intersection: X with a horizontal bar below
+                polyline({{x-h,y-h,z},{x+h,y+h,z}});
+                polyline({{x+h,y-h,z},{x-h,y+h,z}});
+                polyline({{x-h,y-h*1.4,z},{x+h,y-h*1.4,z}});
+            }
+            else
+            {
+                // Fallback: hollow square
+                polyline({{x-h,y-h,z},{x+h,y-h,z},{x+h,y+h,z},{x-h,y+h,z},{x-h,y-h,z}});
+            }
+            } // end thickness pass loop
+        }
+
         return Adesk::kTrue;
     }
 
@@ -95,7 +251,13 @@ protected:
     AcDbObjectId   id()           const override { return AcDbObjectId::kNull; }
 
 private:
-    AcArray<Line> m_lines;
+    AcArray<Line>   m_lines;
+    bool            m_hasSnap        = false;
+    AcGePoint3d     m_snapPt;
+    AcDb::OsnapMask m_snapMask       = static_cast<AcDb::OsnapMask>(0);
+    double          m_markerHalfSize = 0.0;
+    BYTE            m_snapR = 255, m_snapG = 255, m_snapB = 0;
+    double          m_pixelSize      = 1.0;
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -156,6 +318,7 @@ public:
     // GDI+ token (initialised in OnInitDialog, shut down in PostNcDestroy)
     ULONG_PTR        m_gdipToken = 0;
     CDbChangeReactor m_dbReactor;
+    COsnapMonitor    m_osnapMonitor;
 
 protected:
     virtual void DoDataExchange(CDataExchange *pDX);
