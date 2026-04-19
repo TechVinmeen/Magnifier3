@@ -219,23 +219,17 @@ void CBlockViewDlg::OnTimer(UINT_PTR nIDEvent)
     POINT pt;
     ::GetCursorPos(&pt);
 
-    // Show only while AutoCAD's crosshair is active over an AutoCAD window.
-    // Two independent checks must both pass:
-    //   1. Window under cursor belongs to this process (excludes everything outside AutoCAD).
-    //   2. GetCursor() == NULL: AutoCAD calls SetCursor(NULL) on this thread to hide the
-    //      Windows cursor and draw its own crosshair. When over the ribbon, ViewCube, or
-    //      any other UI surface AutoCAD sets a real cursor handle instead.
+    // Show only while AutoCAD's viewport window (which has NULL class cursor) is under the mouse.
+    // AutoCAD's viewport sets GCLP_HCURSOR = NULL so it can draw its own crosshair via SetCursor().
+    // Ribbon, menus, palettes, and external apps all have non-NULL class cursors.
     HWND hwndUnder = ::WindowFromPoint(pt);
     bool inAcadEditor = false;
     if (hwndUnder != NULL &&
         hwndUnder != m_hWnd &&
         !::IsChild(m_hWnd, hwndUnder))
     {
-        DWORD winPid = 0;
-        ::GetWindowThreadProcessId(hwndUnder, &winPid);
-        bool inAcadProcess   = (winPid == ::GetCurrentProcessId());
-        bool crosshairActive = (::GetCursor() == NULL);
-        inAcadEditor = inAcadProcess && crosshairActive;
+        HCURSOR hCur = (HCURSOR)::GetClassLongPtr(hwndUnder, GCLP_HCURSOR);
+        inAcadEditor = (hCur == NULL);
     }
 
     if (!inAcadEditor)
