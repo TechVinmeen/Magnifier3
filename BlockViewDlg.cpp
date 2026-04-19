@@ -219,25 +219,7 @@ void CBlockViewDlg::OnTimer(UINT_PTR nIDEvent)
     POINT pt;
     ::GetCursorPos(&pt);
 
-    // Show only while AutoCAD's viewport window (which has NULL class cursor) is under the mouse.
-    // AutoCAD's viewport sets GCLP_HCURSOR = NULL so it can draw its own crosshair via SetCursor().
-    // Ribbon, menus, palettes, and external apps all have non-NULL class cursors.
     HWND hwndUnder = ::WindowFromPoint(pt);
-    bool inAcadEditor = false;
-    if (hwndUnder != NULL &&
-        hwndUnder != m_hWnd &&
-        !::IsChild(m_hWnd, hwndUnder))
-    {
-        HCURSOR hCur = (HCURSOR)::GetClassLongPtr(hwndUnder, GCLP_HCURSOR);
-        inAcadEditor = (hCur == NULL);
-    }
-
-    if (!inAcadEditor)
-    {
-        if (IsWindowVisible())
-            ShowWindow(SW_HIDE);
-        return;
-    }
 
     if (!IsWindowVisible())
         ShowWindow(SW_SHOWNOACTIVATE);

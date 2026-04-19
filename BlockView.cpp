@@ -98,16 +98,12 @@ void InitApplication()
 {
     // NOTE: DO NOT edit the following lines.
     //{{AFX_ARX_INIT
-    AddCommand(_T("ASDK"), _T("BLOCKVIEW"), _T("BVIEW"), ACRX_CMD_TRANSPARENT, AsdkBlockView);
+    AddCommand(_T("ASDK"), _T("MAGNIFY"), _T("MAGNIFY"), ACRX_CMD_TRANSPARENT, AsdkBlockView);
     AddCommand(_T("ASDK"), _T("RenderOffScreen"), _T("ROS"), ACRX_CMD_TRANSPARENT | ACRX_CMD_USEPICKSET, AsdkRenderOffScreen);
     AddCommand(_T("ASDK"), _T("CONFIGGS"), _T("CONFIGGS"), ACRX_CMD_TRANSPARENT | ACRX_CMD_USEPICKSET, AsdkConfigGS);
     //}}AFX_ARX_INIT
 
-  acutPrintf(_T("\nBlockView Sample Loaded"));
-  acutPrintf(_T("\n\nCommands are:"));
-  acutPrintf(_T("\n  Bview - display the BlockView dialog"));
-  acutPrintf(_T("\n  ROS - Render off screen image"));
-  acutPrintf(_T("\n  Configgs - Programatically display the Graphics settings\n"));
+  acutPrintf(_T("\nMagnify loaded. Type MAGNIFY to toggle."));
 }
 
 // Unload this application. Unregister all objects
