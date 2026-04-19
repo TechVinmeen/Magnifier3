@@ -44,6 +44,8 @@ static char THIS_FILE[] = __FILE__;
 
 ACRX_CONS_DEFINE_MEMBERS(COsnapMonitor, AcEdInputPointMonitor, 1);
 
+UINT_PTR CBlockViewDlg::s_timerID = 0;
+
 BEGIN_MESSAGE_MAP(CCrosshairWnd, CWnd)
     ON_WM_PAINT()
     ON_WM_ERASEBKGND()
@@ -69,7 +71,6 @@ void CBlockViewDlg::DoDataExchange(CDataExchange *pDX)
 
 BEGIN_MESSAGE_MAP(CBlockViewDlg, CAcUiDialog)
     ON_WM_SIZE()
-    ON_WM_TIMER()
     ON_WM_DESTROY()
     ON_WM_ERASEBKGND()
     ON_MESSAGE(WM_NCCALCSIZE, OnNcCalcSize)
@@ -77,6 +78,12 @@ END_MESSAGE_MAP()
 
 /////////////////////////////////////////////////////////////////////////////
 // CBlockViewDlg message handlers
+
+void CALLBACK CBlockViewDlg::TimerProc(HWND, UINT, UINT_PTR, DWORD)
+{
+    if (g_pBlockViewDlg)
+        g_pBlockViewDlg->OnTimer(0);
+}
 
 BOOL CBlockViewDlg::OnInitDialog()
 {
@@ -126,8 +133,9 @@ BOOL CBlockViewDlg::OnInitDialog()
     SetWindowPos(nullptr, pt.x + 5, pt.y - 5 - 200, 0, 0,
                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 
-    // Start cursor-follow timer (~60 fps)
-    SetTimer(1, 16, nullptr);
+    // Start cursor-follow timer (~60 fps) — standalone TIMERPROC (no HWND) so it
+    // fires on AutoCAD's main thread, giving GetCursor() the correct crosshair state.
+    s_timerID = ::SetTimer(nullptr, 0, 16, TimerProc);
 
     return TRUE;
 }
@@ -211,18 +219,23 @@ void CBlockViewDlg::OnTimer(UINT_PTR nIDEvent)
     POINT pt;
     ::GetCursorPos(&pt);
 
-    // Show only while the AutoCAD drawing-editor crosshair is active.
-    // AutoCAD's viewport window sets GCLP_HCURSOR = NULL so it can draw its
-    // own crosshair via SetCursor().  Every other surface (ribbon, menus,
-    // tool palettes, file dialogs, etc.) has a non-NULL class cursor.
+    // Show only while AutoCAD's crosshair is active over an AutoCAD window.
+    // Two independent checks must both pass:
+    //   1. Window under cursor belongs to this process (excludes everything outside AutoCAD).
+    //   2. GetCursor() == NULL: AutoCAD calls SetCursor(NULL) on this thread to hide the
+    //      Windows cursor and draw its own crosshair. When over the ribbon, ViewCube, or
+    //      any other UI surface AutoCAD sets a real cursor handle instead.
     HWND hwndUnder = ::WindowFromPoint(pt);
     bool inAcadEditor = false;
     if (hwndUnder != NULL &&
         hwndUnder != m_hWnd &&
         !::IsChild(m_hWnd, hwndUnder))
     {
-        HCURSOR hCur = (HCURSOR)::GetClassLongPtr(hwndUnder, GCLP_HCURSOR);
-        inAcadEditor = (hCur == NULL);
+        DWORD winPid = 0;
+        ::GetWindowThreadProcessId(hwndUnder, &winPid);
+        bool inAcadProcess   = (winPid == ::GetCurrentProcessId());
+        bool crosshairActive = (::GetCursor() == NULL);
+        inAcadEditor = inAcadProcess && crosshairActive;
     }
 
     if (!inAcadEditor)
@@ -249,7 +262,8 @@ void CBlockViewDlg::OnTimer(UINT_PTR nIDEvent)
 
 void CBlockViewDlg::OnDestroy()
 {
-    KillTimer(1);
+    ::KillTimer(nullptr, s_timerID);
+    s_timerID = 0;
     acDocManager->curDocument()->inputPointManager()->removePointMonitor(&m_osnapMonitor);
 
     if (mCurrentDwg)

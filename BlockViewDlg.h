@@ -334,6 +334,9 @@ protected:
 
     DECLARE_MESSAGE_MAP()
 
+    static void CALLBACK TimerProc(HWND, UINT, UINT_PTR, DWORD);
+    static UINT_PTR s_timerID;
+
 private:
     Acad::ErrorStatus InitDrawingControl(AcDbDatabase *pDb,
                                          const TCHAR *space = ACDB_MODEL_SPACE);
